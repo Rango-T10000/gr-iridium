@@ -348,6 +348,7 @@ class FlowGraph(gr.top_block):
             stream_args = ""
 
             stream_args = uhd.stream_args(cpu_format, wire_format, args=stream_args)
+            #----------------UHD_USRP_Source信号接收下变频Block----------------
             source = uhd.usrp_source(dev_addr + "," + dev_args, stream_args)
 
             source.set_samp_rate(self._input_sample_rate)
@@ -499,6 +500,7 @@ class FlowGraph(gr.top_block):
             else:
                 source = file_source
 
+        #------------Burst信号检测的block----------
         self._fft_burst_tagger = iridium.fft_burst_tagger(center_frequency=self._center_frequency,
                                                           fft_size=self._fft_size,
                                                           sample_rate=self._input_sample_rate,
@@ -513,15 +515,18 @@ class FlowGraph(gr.top_block):
                                                           debug=self._verbose)
         self._fft_burst_tagger.set_min_output_buffer(1024 * 64)
 
+        #-----------------LPF低通滤波：对检测到的burst信号做滤波，去除无用的频率成分----------------
         # Initial filter to filter the detected bursts. Runs at burst_sample_rate. Used to decimate the signal.
         input_filter = gnuradio.filter.firdes.low_pass_2(1, self._channel_sample_rate, self._burst_width / 2, self._burst_width, 40)
         #input_filter = gnuradio.filter.firdes.low_pass_2(1, self._channel_sample_rate, 42e3/2, 24e3, 40)
         #print len(input_filter)
 
+        #-----------------LPF低通滤波寻找信号的开始：只留下低频信号，突出preamble----------------
         # Filter to find the start of the signal. Should be fairly narrow.
         start_finder_filter = gnuradio.filter.firdes.low_pass_2(1, self._burst_sample_rate, 5e3 / 2, 10e3 / 2, 60)
         #print len(start_finder_filter)
 
+        #-----------------QPSK解调----------------
         self._iridium_qpsk_demod = iridium.iridium_qpsk_demod(self._channels)
         self._frame_sorter = iridium.frame_sorter()
         self._iridium_frame_printer = iridium.iridium_frame_printer(file_info)
@@ -536,7 +541,8 @@ class FlowGraph(gr.top_block):
             #self._burst_to_pdu_converters = []
             #self._burst_downmixers = []
             #return
-
+        
+        #------------------初始化好的block是通过self.connect()来拼接在一起的--------------
         tb.connect(source, self._fft_burst_tagger)
 
         if self._use_channelizer:

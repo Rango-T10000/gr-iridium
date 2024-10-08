@@ -10,6 +10,8 @@ import argparse
 
 import iridium.iridium_extractor_flowgraph
 
+
+#注意：这是一个用python3作为解释器运行的脚本，开头定义了
 queue_len_max = 0
 
 out_count = 0
@@ -42,7 +44,7 @@ sample_formats = {
     'rtl': 'cu8',
 }
 
-
+#--------------------这是一个终端输出打印函数，传入的参数是main函数中实例化的Class FlowGraph的对象--------------
 def print_stats(tb):
     global last_print, queue_len_max, out_count, in_count
     global drop_count, drop_count_total, in_ok_count, out_ok_count, sample_count_total
@@ -118,6 +120,8 @@ def print_stats(tb):
         time.sleep(1)
 
 
+
+#--------------------main()-----------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Receive and demodulate Iridium transmissions.',
                                      epilog='For more detailed usage information see https://github.com/muccc/gr-iridium/')
@@ -155,6 +159,7 @@ if __name__ == "__main__":
     parser.add_argument('filename', action="store", nargs='?', default='-',
                         help='File containing either raw samples or a configuration for an SDR. If not present stdin will be used to read raw samples.')
     args = parser.parse_args()
+#-------------------------------------config参数解析完成----------------------------------
 
     center = None
     fmt = None
@@ -162,6 +167,7 @@ if __name__ == "__main__":
     samples_per_symbol = 10
     cfg = {}
 
+    #开始对照文件类型，进一步设定好参数
     if args.filename in ('-', '/dev/stdin'):
         filename = "/dev/stdin"
         cfg['source'] = 'stdin'
@@ -364,6 +370,9 @@ if __name__ == "__main__":
         with open(args.raw_capture_filename + '.sigmf-meta', 'w') as outfile:
             json.dump(data, outfile, indent=4)
 
+    #-----------------------配置文件解析完成，得到所有配置参数，开始运行解调程序----------------------
+    #------------Class FlowGraph 位于./python/iridium_extractor_flowgraph.py----------
+    #------------这里实例化这个类为一个对象tb------------
     tb = iridium.iridium_extractor_flowgraph.FlowGraph(center_frequency=center, sample_rate=sample_rate, decimation=decimation,
                                                        filename=filename, sample_format=fmt,
                                                        threshold=args.threshold, burst_width=args.burst_width,
@@ -376,11 +385,12 @@ if __name__ == "__main__":
                                                        file_info=args.file_info,
                                                        samples_per_symbol=samples_per_symbol,
                                                        config=cfg)
-
+    #--------创建了一个新的线程来统计处理的进度，调用了开头定义的打印函数-------
     statistics_thread = threading.Thread(target=print_stats, args=(tb,))
     statistics_thread.daemon = True
     statistics_thread.start()
 
+    #--------启动整个流图，调用Class FlowGraph中的def run()--------
     tb.run()
 
     print("Done.", file=sys.stderr)
