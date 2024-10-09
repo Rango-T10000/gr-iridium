@@ -57,6 +57,7 @@ class FlowGraph(gr.top_block):
         # Just to keep the code below a bit more portable
         tb = self
 
+#--------------------------判断是否使用channelizer--------------------------
         if self._decimation > 1:
             self._use_channelizer = True
 
@@ -149,6 +150,9 @@ class FlowGraph(gr.top_block):
             print("burst_width: %d Hz" % self._burst_width, file=sys.stderr)
             print("source:", config['source'], file=sys.stderr)
 
+
+#------------判断配置文件中source类型(osmosdr/soapy/zeromq-sub/uhd)，并配置相应参数--------------------------
+#------------并且初始化对应的source block,比方你用的是USRP,那就是uhd驱动，应该选用usrp_source-------------------
         if config['source'] == 'osmosdr':
             d = config["osmosdr-source"]
 
@@ -348,8 +352,8 @@ class FlowGraph(gr.top_block):
             stream_args = ""
 
             stream_args = uhd.stream_args(cpu_format, wire_format, args=stream_args)
-            #----------------UHD_USRP_Source信号接收下变频Block----------------
-            source = uhd.usrp_source(dev_addr + "," + dev_args, stream_args)
+            #--------------#Uhd_usrp_source模块------------
+            source = uhd.usrp_source(dev_addr + "," + dev_args, stream_args)  
 
             source.set_samp_rate(self._input_sample_rate)
             source.set_center_freq(self._center_frequency)
@@ -415,7 +419,7 @@ class FlowGraph(gr.top_block):
                     time.sleep(1)
 
                 print("gps_locked!", file=sys.stderr)
-
+    #------------判断配置文件中是否有对其他source（clock,time...）的相应配置，上面的是receiver block--------------------------
             if clock_source:
                 print("Waiting for ref_locked...", file=sys.stderr)
                 while True:
@@ -458,8 +462,10 @@ class FlowGraph(gr.top_block):
                 # This prevents the output from having bogous time stamps if no GPSDO is available.
                 source.set_time_now(uhd.time_spec_t(time.time()))
 
+            #---------------------把上面配置好的source赋值给self-------------------
             self.source = source
 
+#------------如果配置文件中没有source block，那就不需要，是offline，直接读取信号的文件，然后进行后续模块-------------------
         else:
             if sample_format == "cu8":
                 converter = iridium.iuchar_to_complex()
@@ -489,10 +495,12 @@ class FlowGraph(gr.top_block):
                 from iridium.file_object_source import file_object_source
                 file_source = file_object_source(fileobject=config['object'], itemtype=itemtype)
             else:
+                #---------------不属于任何一个就是进这个---------------
                 file_source = blocks.file_source(itemsize=itemsize, filename=config['file'], repeat=False)
 
             self.source = file_source  # XXX: keep reference
 
+            #----------------这个converter就是那个不同数据格式转换的block,如float->xomplex----------------
             if converter:
                 multi = blocks.multiply_const_cc(scale)
                 tb.connect(file_source, converter, multi)
@@ -500,7 +508,11 @@ class FlowGraph(gr.top_block):
             else:
                 source = file_source
 
-        #------------Burst信号检测的block----------
+        # #1.后接一个file sink模块把这个source的输出保存下来,就是usrp_source的输出，就是raw_data
+        # self._file_sink_1 = blocks.file_sink(gr.sizeof_gr_complex, "/home/tagsys/wzc/gr-iridium/block_middle_output/after_source.dat")
+        # tb.connect(source, self._file_sink_1)
+
+    #------------------------------初始化几个后面用到的block--------------------------
         self._fft_burst_tagger = iridium.fft_burst_tagger(center_frequency=self._center_frequency,
                                                           fft_size=self._fft_size,
                                                           sample_rate=self._input_sample_rate,
@@ -515,22 +527,20 @@ class FlowGraph(gr.top_block):
                                                           debug=self._verbose)
         self._fft_burst_tagger.set_min_output_buffer(1024 * 64)
 
-        #-----------------LPF低通滤波：对检测到的burst信号做滤波，去除无用的频率成分----------------
         # Initial filter to filter the detected bursts. Runs at burst_sample_rate. Used to decimate the signal.
         input_filter = gnuradio.filter.firdes.low_pass_2(1, self._channel_sample_rate, self._burst_width / 2, self._burst_width, 40)
         #input_filter = gnuradio.filter.firdes.low_pass_2(1, self._channel_sample_rate, 42e3/2, 24e3, 40)
         #print len(input_filter)
 
-        #-----------------LPF低通滤波寻找信号的开始：只留下低频信号，突出preamble----------------
         # Filter to find the start of the signal. Should be fairly narrow.
         start_finder_filter = gnuradio.filter.firdes.low_pass_2(1, self._burst_sample_rate, 5e3 / 2, 10e3 / 2, 60)
         #print len(start_finder_filter)
 
-        #-----------------QPSK解调----------------
         self._iridium_qpsk_demod = iridium.iridium_qpsk_demod(self._channels)
         self._frame_sorter = iridium.frame_sorter()
         self._iridium_frame_printer = iridium.iridium_frame_printer(file_info)
 
+    #------------------------------判断是否要把source模块的输出作为raw_data保存成文件--------------------------
         if raw_capture_filename:
             multi = blocks.multiply_const_cc(32768)
             converter = blocks.complex_to_interleaved_short()
@@ -541,15 +551,23 @@ class FlowGraph(gr.top_block):
             #self._burst_to_pdu_converters = []
             #self._burst_downmixers = []
             #return
-        
-        #------------------初始化好的block是通过self.connect()来拼接在一起的--------------
-        tb.connect(source, self._fft_burst_tagger)
 
+#-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        tb.connect(source, self._fft_burst_tagger)
+        
+        #2.后接一个file sink模块把这个fft_burst_tagger的输出保存下来
+        self._file_sink_2 = blocks.file_sink(gr.sizeof_gr_complex, "/home/tagsys/wzc/gr-iridium/block_middle_output/after_fft_burst_tagger_file.dat")
+        tb.connect(self._fft_burst_tagger, self._file_sink_2)
+
+
+    #----------------------如果之前配置为使用channelizer，则这里进一步配置--------------------------
         if self._use_channelizer:
+            #-------------self的这些模块初始化为空列表，后面补上block---------------
             self._burst_to_pdu_converters = []
             self._burst_downmixers = []
             sinks = []
 
+            #-------------------遍历每个channel后面都接一样的block-----------------
             for channel in range(self._channels):
                 if not self._use_fft_channelizer:
                     center = channel if channel <= self._channels / 2 else (channel - self._channels)
@@ -567,6 +585,7 @@ class FlowGraph(gr.top_block):
                                                                          not self._offline)
                     self._burst_to_pdu_converters.append(burst_to_pdu_converter)
 
+                #-------------初始化block: burst_downmix(包括在上面初始化过的input_filter，start_finder_filter)---------------
                 burst_downmixer = iridium.burst_downmix(self._burst_sample_rate,
                                                         int(0.007 * self._burst_sample_rate),
                                                         0,
@@ -594,6 +613,7 @@ class FlowGraph(gr.top_block):
             else:
                 self._channelizer = gnuradio.filter.pfb.channelizer_ccf(numchans=self._channels, taps=self._pfb_fir_filter, oversample_rate=self._channelizer_over_sample_ratio)
 
+#-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             tb.connect(self._fft_burst_tagger, self._channelizer)
 
             for i in range(self._channels):
@@ -610,6 +630,11 @@ class FlowGraph(gr.top_block):
                     tb.msg_connect((self._burst_downmixers[i], 'burst_handled'), (self._channelizer, 'burst_handled'))
 
                 tb.msg_connect((self._burst_downmixers[i], 'cpdus'), (self._iridium_qpsk_demod, 'cpdus%d' % i))
+    
+
+
+
+    #----------------------如果之前配置为不使用channelizer，则这里进一步配置--------------------------
         else:
             burst_downmix = iridium.burst_downmix(self._burst_sample_rate, int(0.007 * self._burst_sample_rate), 0, (input_filter), (start_finder_filter), self._handle_multiple_frames_per_burst)
             if debug_id is not None:
@@ -633,6 +658,15 @@ class FlowGraph(gr.top_block):
 
         tb.msg_connect((self._iridium_qpsk_demod, 'pdus'), (self._frame_sorter, 'pdus'))
         tb.msg_connect((self._frame_sorter, 'pdus'), (self._iridium_frame_printer, 'pdus'))
+
+
+
+#注意：
+#     上方的tb.connect()是block的连接，传输信号数据,data stream
+#     上方的tb.msg_sonnect()是block的端口传输message的连接
+
+
+
 
     def get_n_detected_bursts(self):
         return self._fft_burst_tagger.get_n_tagged_bursts()

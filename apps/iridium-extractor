@@ -167,7 +167,7 @@ if __name__ == "__main__":
     samples_per_symbol = 10
     cfg = {}
 
-    #开始对照文件类型，进一步设定好参数
+    #---------开始对照文件类型，进一步设定好参数-----------
     if args.filename in ('-', '/dev/stdin'):
         filename = "/dev/stdin"
         cfg['source'] = 'stdin'
