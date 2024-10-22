@@ -357,9 +357,8 @@ class FlowGraph(gr.top_block):
             wire_format = 'sc16'
             stream_args = ""
 
-            stream_args = uhd.stream_args(cpu_format, wire_format, args=stream_args)
-
             # #--------------#Uhd_usrp_source模块------------
+            # stream_args = uhd.stream_args(cpu_format, wire_format, args=stream_args)
             # source = uhd.usrp_source(dev_addr + "," + dev_args, stream_args)  
 
             # source.set_samp_rate(self._input_sample_rate)

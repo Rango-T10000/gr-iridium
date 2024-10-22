@@ -500,7 +500,7 @@ class FlowGraph(gr.top_block):
 
             self.source = file_source  # XXX: keep reference
 
-            #----------------这个converter就是那个不同数据格式转换的block,如float->xomplex----------------
+            #----------------这个converter就是那个不同数据格式转换的block,如float->complex----------------
             if converter:
                 multi = blocks.multiply_const_cc(scale)
                 tb.connect(file_source, converter, multi)
@@ -508,9 +508,9 @@ class FlowGraph(gr.top_block):
             else:
                 source = file_source
 
-        # #1.后接一个file sink模块把这个source的输出保存下来,就是usrp_source的输出，就是raw_data
-        # self._file_sink_1 = blocks.file_sink(gr.sizeof_gr_complex, "/home/tagsys/wzc/gr-iridium/block_middle_output/after_source.dat")
-        # tb.connect(source, self._file_sink_1)
+        #1.后接一个file sink模块把这个source的输出保存下来,就是usrp_source的输出，就是raw_data
+        self._file_sink_1 = blocks.file_sink(gr.sizeof_gr_complex, "/home/ddh/ssd2/iridium_data/after_source.dat")
+        tb.connect(source, self._file_sink_1)
 
     #------------------------------初始化几个后面用到的block--------------------------
         self._fft_burst_tagger = iridium.fft_burst_tagger(center_frequency=self._center_frequency,
@@ -556,7 +556,7 @@ class FlowGraph(gr.top_block):
         tb.connect(source, self._fft_burst_tagger)
         
         #2.后接一个file sink模块把这个fft_burst_tagger的输出保存下来
-        self._file_sink_2 = blocks.file_sink(gr.sizeof_gr_complex, "/home/tagsys/wzc/gr-iridium/block_middle_output/after_fft_burst_tagger_file.dat")
+        self._file_sink_2 = blocks.file_sink(gr.sizeof_gr_complex, "/home/ddh/ssd2/iridium_data/after_fft_burst_tagger_file.dat")
         tb.connect(self._fft_burst_tagger, self._file_sink_2)
 
 
